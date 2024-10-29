@@ -149,6 +149,7 @@ defmodule Redix.Connector do
           {:ok, server_socket, address}
         else
           {cause, reason} when cause in [:error, :stop] ->
+            Logger.error("Redix.Connector failed with cause: #{inspect(cause)} and reason: #{inspect(reason)}")
             :telemetry.execute([:redix, :failed_connection], %{}, %{
               connection: conn_pid,
               connection_name: opts[:name],
