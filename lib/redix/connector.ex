@@ -21,11 +21,14 @@ defmodule Redix.Connector do
         connect_directly(host, port, opts)
 
       {sentinel_opts, opts} when is_list(sentinel_opts) ->
-        connect_through_sentinel(opts, sentinel_opts, conn_pid)
+        res = connect_through_sentinel(opts, sentinel_opts, conn_pid)
+        Logger.error("Redix.Connector connect_through_sentinel result: #{inspect(res)}")
+        res
     end
   end
 
   defp connect_directly(host, port, opts) do
+    Logger.error("Redix.Connector connect_directly host: #{inspect(host)}, port: #{inspect(port)}, opts: #{inspect(opts)}")
     transport = if opts[:ssl], do: :ssl, else: :gen_tcp
     socket_opts = build_socket_opts(transport, opts[:socket_opts])
     timeout = Keyword.fetch!(opts, :timeout)
@@ -161,6 +164,7 @@ defmodule Redix.Connector do
         end
 
       {:error, reason} ->
+        Logger.error("Redix.Connector failed init: #{inspect(reason)}")
         :telemetry.execute([:redix, :failed_connection], %{}, %{
           connection: conn_pid,
           connection_name: opts[:name],
@@ -282,6 +286,7 @@ defmodule Redix.Connector do
           | {:error, Redix.Error.t()}
           | {:error, :inet.posix()}
   def sync_command(transport, socket, command, timeout) do
+    Logger.error("Redix.Connector sync_command: #{inspect(command)}")
     with :ok <- transport.send(socket, Redix.Protocol.pack(command)),
          do: recv_response(transport, socket, &Redix.Protocol.parse/1, timeout)
   end
