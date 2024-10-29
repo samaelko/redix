@@ -131,15 +131,12 @@ defmodule Redix.Connector do
   defp connect_through_sentinel([sentinel | rest], sentinel_opts, opts, transport, conn_pid) do
     case connect_to_sentinel(sentinel, sentinel_opts, transport) do
       {:ok, sent_socket} ->
-        _ = Logger.debug(fn -> "Connected to sentinel #{inspect(sentinel)}" end)
+        Logger.error("Connected to sentinel #{inspect(sentinel)}")
 
         with :ok <- maybe_auth(transport, sent_socket, sentinel, sentinel_opts[:timeout]),
              {:ok, {server_host, server_port}} <-
                ask_sentinel_for_server(transport, sent_socket, sentinel_opts),
-             _ =
-               Logger.debug(fn ->
-                 "Sentinel reported #{sentinel_opts[:role]}: #{server_host}:#{server_port}"
-               end),
+             _ = Logger.error("Sentinel reported #{sentinel_opts[:role]}: #{server_host}:#{server_port}"),
              server_host = string_address_to_erlang(server_host),
              {:ok, server_socket, address} <-
                connect_directly(
