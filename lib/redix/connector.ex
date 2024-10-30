@@ -44,7 +44,7 @@ defmodule Redix.Connector do
       case auth_and_select(transport, socket, opts, timeout) do
         :ok -> 
           Logger.error("Redix.Connector auth_and_select returns - ok")
-          :ok, socket, Format.format_host_and_port(host, port)}
+          {:ok, socket, Format.format_host_and_port(host, port)}
         {:error, %Redix.Error{} = error} ->
           Logger.error("Redix.Connector auth_and_select returns - error: #{inspect(error)}")
           {:stop, error}
