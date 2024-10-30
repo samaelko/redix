@@ -24,6 +24,7 @@ defmodule Redix.Connection do
   ## Public API
 
   def start_link(opts) when is_list(opts) do
+    Logger.error("Redix.Connection start_link opts: #{inspect(opts)}")
     opts = StartOptions.sanitize(:redix, opts)
     {gen_statem_opts, opts} = Keyword.split(opts, [:hibernate_after, :debug, :spawn_opt])
 
@@ -55,12 +56,14 @@ defmodule Redix.Connection do
   end
 
   def stop(conn, timeout) do
+    Logger.error("Redix.Connection stop conn: #{inspect(conn)}, timeout: #{inspect(timeout)}")
     :gen_statem.stop(conn, :normal, timeout)
   end
 
   # TODO: Once we depend on Elixir 1.15+ (which requires OTP 24+, which introduces process
   # aliases), we can get rid of the extra work to support timeouts.
   def pipeline(conn, commands, timeout, telemetry_metadata) do
+    Logger.error("Redix.Connection stop conn: #{inspect(conn)}, commands: #{inspect(commands)}, timeout: #{inspect(timeout)}, telemetry_metadata: #{inspect(telemetry_metadata)}")
     conn_pid = GenServer.whereis(conn)
 
     request_id = Process.monitor(conn_pid)
@@ -87,6 +90,7 @@ defmodule Redix.Connection do
   end
 
   defp telemetry_pipeline_metadata(conn, conn_pid, commands, telemetry_metadata) do
+    Logger.error("Redix.Connection telemetry_pipeline_metadata conn: #{inspect(conn)}, commands: #{inspect(commands)}, conn_pid: #{inspect(conn_pid)}, telemetry_metadata: #{inspect(telemetry_metadata)}")
     name =
       if is_pid(conn) do
         nil
@@ -103,11 +107,13 @@ defmodule Redix.Connection do
   end
 
   defp execute_telemetry_pipeline_start(metadata) do
+    Logger.error("Redix.Connection execute_telemetry_pipeline_start metadata: #{inspect(metadata)}")
     measurements = %{system_time: System.system_time()}
     :ok = :telemetry.execute([:redix, :pipeline, :start], measurements, metadata)
   end
 
   defp execute_telemetry_pipeline_stop(metadata, start_time, response) do
+    Logger.error("Redix.Connection execute_telemetry_pipeline_start metadata: #{inspect(metadata)}, start_time: #{inspect(start_time)}, response: #{inspect(response)}")
     measurements = %{duration: System.monotonic_time() - start_time}
 
     metadata =
@@ -128,6 +134,7 @@ defmodule Redix.Connection do
 
   @impl true
   def init(opts) do
+    Logger.error("Redix.Connection init opts: #{inspect(opts)}")
     transport = if(opts[:ssl], do: :ssl, else: :gen_tcp)
     queue_table = :ets.new(:queue, [:ordered_set, :public])
     {:ok, socket_owner} = SocketOwner.start_link(self(), opts, queue_table)
@@ -163,6 +170,7 @@ defmodule Redix.Connection do
 
   @impl true
   def terminate(reason, _state, data) do
+    Logger.error("Redix.Connection terminate reason: #{inspect(reason)}, data: #{inspect(data)}")
     if Process.alive?(data.socket_owner) and reason == :normal do
       :ok = SocketOwner.normal_stop(data.socket_owner)
     end
@@ -175,16 +183,19 @@ defmodule Redix.Connection do
   # We want to connect/reconnect. We start the socket owner process and then go in the :connecting
   # state.
   def disconnected({:timeout, :reconnect}, _timer_info, %__MODULE__{} = data) do
+    Logger.error("Redix.Connection disconnected data: #{inspect(data)}")
     {:ok, socket_owner} = SocketOwner.start_link(self(), data.opts, data.table)
     new_data = %{data | socket_owner: socket_owner}
     {:next_state, :connecting, new_data}
   end
 
   def disconnected({:timeout, {:client_timed_out, _counter}}, _from, _data) do
+    Logger.error("Redix.Connection disconnected keep_state_and_data")
     :keep_state_and_data
   end
 
   def disconnected(:internal, {:notify_of_disconnection, _reason}, %__MODULE__{table: table}) do
+    Logger.error("Redix.Connection disconnected notify_of_disconnection")
     fun = fn {_counter, from, _ncommands, timed_out?}, _acc ->
       if not timed_out?, do: reply(from, {:error, %ConnectionError{reason: :disconnected}})
     end
@@ -196,6 +207,7 @@ defmodule Redix.Connection do
   end
 
   def disconnected(:cast, {:pipeline, _commands, from, _timeout}, _data) do
+    Logger.error("Redix.Connection disconnected pipeline")
     reply(from, {:error, %ConnectionError{reason: :closed}})
     :keep_state_and_data
   end
@@ -204,6 +216,7 @@ defmodule Redix.Connection do
   # the socket owner to die so that it can finish processing the data it's processing. When it's
   # dead, we go ahead and notify the remaining clients, setup backoff, and so on.
   def disconnected(:info, {:stopped, owner, reason}, %__MODULE__{socket_owner: owner} = data) do
+    Logger.error("Redix.Connection disconnected data: #{inspect(data)}")
     :telemetry.execute([:redix, :disconnection], %{}, %{
       connection: self(),
       connection_name: data.opts[:name],
@@ -220,6 +233,7 @@ defmodule Redix.Connection do
         {:connected, owner, socket, address},
         %__MODULE__{socket_owner: owner} = data
       ) do
+    Logger.error("Redix.Connection connecting data: #{inspect(data)}")    
     :telemetry.execute([:redix, :connection], %{}, %{
       connection: self(),
       connection_name: data.opts[:name],
@@ -232,10 +246,12 @@ defmodule Redix.Connection do
   end
 
   def connecting(:cast, {:pipeline, _commands, _from, _timeout}, _data) do
+    Logger.error("Redix.Connection connecting pipeline")  
     {:keep_state_and_data, :postpone}
   end
 
   def connecting(:info, {:stopped, owner, reason}, %__MODULE__{socket_owner: owner} = data) do
+    Logger.error("Redix.Connection connecting data: #{inspect(data)}")  
     # We log this when the socket owner stopped while connecting.
     :telemetry.execute([:redix, :failed_connection], %{}, %{
       connection: self(),
@@ -248,10 +264,12 @@ defmodule Redix.Connection do
   end
 
   def connecting({:timeout, {:client_timed_out, _counter}}, _from, _data) do
+    Logger.error("Redix.Connection connecting timeout")  
     :keep_state_and_data
   end
 
   def connected(:cast, {:pipeline, commands, from, timeout}, data) do
+    Logger.error("Redix.Connection connected data: #{inspect(data)}")  
     {ncommands, data} = get_client_reply(data, commands)
 
     if ncommands > 0 do
@@ -287,6 +305,7 @@ defmodule Redix.Connection do
   end
 
   def connected(:info, {:stopped, owner, reason}, %__MODULE__{socket_owner: owner} = data) do
+    Logger.error("Redix.Connection connected data: #{inspect(data)}")  
     :telemetry.execute([:redix, :disconnection], %{}, %{
       connection: self(),
       connection_name: data.opts[:name],
@@ -299,6 +318,7 @@ defmodule Redix.Connection do
   end
 
   def connected({:timeout, {:client_timed_out, counter}}, from, %__MODULE__{} = data) do
+    Logger.error("Redix.Connection connected data: #{inspect(data)}")  
     if _found? = :ets.update_element(data.table, counter, {4, _timed_out? = true}) do
       reply(from, {:error, %ConnectionError{reason: :timeout}})
     end
@@ -309,15 +329,18 @@ defmodule Redix.Connection do
   ## Helpers
 
   defp reply({pid, request_id} = _from, reply) do
+    Logger.error("Redix.Connection reply reply: #{inspect(reply)}")  
     send(pid, {request_id, reply})
   end
 
   defp disconnect(_data, %Redix.Error{} = error) do
+    Logger.error("Redix.Connection disconnect error: #{inspect(error)}")
     Logger.error("Disconnected from Redis due to error: #{Exception.message(error)}")
     {:stop, error}
   end
 
   defp disconnect(data, reason) do
+    Logger.error("Redix.Connection disconnect data: #{inspect(data)}, reason: #{inspect(reason)}")
     if data.opts[:exit_on_disconnection] do
       {:stop, %ConnectionError{reason: reason}}
     else
@@ -333,11 +356,13 @@ defmodule Redix.Connection do
   end
 
   defp next_backoff(%__MODULE__{backoff_current: nil} = data) do
+    Logger.error("Redix.Connection next_backoff data: #{inspect(data)}")
     backoff_initial = data.opts[:backoff_initial]
     {backoff_initial, %{data | backoff_current: backoff_initial}}
   end
 
   defp next_backoff(data) do
+    Logger.error("Redix.Connection next_backoff data: #{inspect(data)}")
     next_exponential_backoff = round(data.backoff_current * @backoff_exponent)
 
     backoff_current =
@@ -351,15 +376,18 @@ defmodule Redix.Connection do
   end
 
   defp get_client_reply(data, commands) do
+    Logger.error("Redix.Connection next_backoff data: #{inspect(data)}, commands: #{inspect(commands)}")  
     {ncommands, client_reply} = get_client_reply(commands, _ncommands = 0, data.client_reply)
     {ncommands, put_in(data.client_reply, client_reply)}
   end
 
   defp get_client_reply([], ncommands, client_reply) do
+    Logger.error("Redix.Connection next_backoff ncommands: #{inspect(ncommands)}, client_reply: #{inspect(client_reply)}")  
     {ncommands, client_reply}
   end
 
   defp get_client_reply([command | rest], ncommands, client_reply) do
+    Logger.error("Redix.Connection next_backoff command: #{inspect(command)}, rest: #{inspect(rest)}, ncommands: #{inspect(ncommands)}, client_reply: #{inspect(client_reply)}")  
     case parse_client_reply(command) do
       :off -> get_client_reply(rest, ncommands, :off)
       :skip when client_reply == :off -> get_client_reply(rest, ncommands, :off)
@@ -378,7 +406,7 @@ defmodule Redix.Connection do
   defp parse_client_reply(["client", "reply", "off"]), do: :off
   defp parse_client_reply(["client", "reply", "skip"]), do: :skip
 
-  defp parse_client_reply([part1, part2, part3])
+  defp parse_client_reply([part1, part2, part3] = parts) 
        when is_binary(part1) and byte_size(part1) == byte_size("CLIENT") and is_binary(part2) and
               byte_size(part2) == byte_size("REPLY") and
               is_binary(part3) and
@@ -389,6 +417,7 @@ defmodule Redix.Connection do
     # but completely unrelated commands causing big memory and CPU spikes. See
     # https://github.com/whatyouhide/redix/issues/177. "if" works here because and/2
     # short-circuits.
+    Logger.error("Redix.Connection parse_client_reply parts: #{inspect(parts)}")     
     if String.upcase(part1) == "CLIENT" and String.upcase(part2) == "REPLY" do
       case String.upcase(part3) do
         "ON" -> :on
@@ -404,6 +433,7 @@ defmodule Redix.Connection do
   defp parse_client_reply(_other), do: nil
 
   defp format_address(%{opts: opts} = _state) do
+    Logger.error("Redix.Connection format_address opts: #{inspect(opts)}")  
     if opts[:sentinel] do
       "sentinel"
     else
