@@ -14,7 +14,7 @@ defmodule Redix.Connector do
         when socket: :gen_tcp.socket() | :ssl.sslsocket(),
              connected_address: String.t()
   def connect(opts, conn_pid) when is_list(opts) and is_pid(conn_pid) do
-    Logger.error("Redix.Connector connect/2")
+    Logger.error("Redix.Connector connect opts: #{inspect(opts)}, conn_pid: #{inspect(conn_pid)}")
     case Keyword.pop(opts, :sentinel) do
       {nil, opts} ->
         host = Keyword.fetch!(opts, :host)
@@ -29,7 +29,6 @@ defmodule Redix.Connector do
   end
 
   defp connect_directly(host, port, opts) do
-    Logger.error("Redix.Connector connect_directly/3")
     Logger.error("Redix.Connector connect_directly host: #{inspect(host)}, port: #{inspect(port)}, opts: #{inspect(opts)}")
     transport = if opts[:ssl], do: :ssl, else: :gen_tcp
     socket_opts = build_socket_opts(transport, opts[:socket_opts])
@@ -43,23 +42,31 @@ defmodule Redix.Connector do
       # a race condition where the network conn breaks after connecting but before
       # AUTH/SELECT.
       case auth_and_select(transport, socket, opts, timeout) do
-        :ok -> {:ok, socket, Format.format_host_and_port(host, port)}
-        {:error, %Redix.Error{} = error} -> {:stop, error}
-        {:error, :extra_bytes_after_reply} -> {:stop, :extra_bytes_after_reply}
-        {:error, reason} -> {:error, reason}
+        :ok -> 
+          Logger.error("Redix.Connector auth_and_select returns - ok")
+          :ok, socket, Format.format_host_and_port(host, port)}
+        {:error, %Redix.Error{} = error} ->
+          Logger.error("Redix.Connector auth_and_select returns - error: #{inspect(error)}")
+          {:stop, error}
+        {:error, :extra_bytes_after_reply} ->
+          Logger.error("Redix.Connector auth_and_select returns - error: extra_bytes_after_reply")
+          {:stop, :extra_bytes_after_reply}
+        {:error, reason} ->
+          Logger.error("Redix.Connector auth_and_select returns - error: #{inspect(reason)}")
+          {:error, reason}
       end
     end
   end
 
   defp auth_and_select(transport, socket, opts, timeout) do
-    Logger.error("Redix.Connector auth_and_select/4")
+    Logger.error("Redix.Connector auth_and_select transport: #{inspect(transport)}, socket: #{inspect(socket)}, opts: #{inspect(opts)}, timeout: #{inspect(timeout)}")
     with :ok <- maybe_auth(transport, socket, opts, timeout),
          :ok <- maybe_select(transport, socket, opts, timeout),
          do: :ok
   end
 
   defp maybe_auth(transport, socket, opts, timeout) do
-    Logger.error("Redix.Connector maybe_auth/4")
+    Logger.error("Redix.Connector maybe_auth transport: #{inspect(transport)}, socket: #{inspect(socket)}, opts: #{inspect(opts)}, timeout: #{inspect(timeout)}")
     username = opts[:username]
 
     password =
@@ -82,7 +89,7 @@ defmodule Redix.Connector do
   end
 
   defp auth_with_username_and_password(transport, socket, username, password, timeout) do
-    Logger.error("Redix.Connector auth_with_username_and_password/5")
+    Logger.error("Redix.Connector auth_with_username_and_password transport: #{inspect(transport)}, socket: #{inspect(socket)}, username: #{inspect(username)}, password: #{inspect(password)}, timeout: #{inspect(timeout)}")
     case sync_command(transport, socket, ["AUTH", username, password], timeout) do
       {:ok, "OK"} ->
         :ok
@@ -111,12 +118,12 @@ defmodule Redix.Connector do
   end
 
   defp auth_with_password(transport, socket, password, timeout) do
-    Logger.error("Redix.Connector auth_with_password/4")
+    Logger.error("Redix.Connector auth_with_password transport: #{inspect(transport)}, socket: #{inspect(socket)}, password: #{inspect(password)}, timeout: #{inspect(timeout)}")
     with {:ok, "OK"} <- sync_command(transport, socket, ["AUTH", password], timeout), do: :ok
   end
 
   defp maybe_select(transport, socket, opts, timeout) do
-    Logger.error("Redix.Connector maybe_select/4")
+    Logger.error("Redix.Connector maybe_select transport: #{inspect(transport)}, socket: #{inspect(socket)}, opts: #{inspect(opts)}, timeout: #{inspect(timeout)}")
     if database = opts[:database] do
       with {:ok, "OK"} <- sync_command(transport, socket, ["SELECT", database], timeout), do: :ok
     else
@@ -125,7 +132,7 @@ defmodule Redix.Connector do
   end
 
   defp connect_through_sentinel(opts, sentinel_opts, conn_pid) do
-    Logger.error("Redix.Connector connect_through_sentinel/3")
+    Logger.error("Redix.Connector connect_through_sentinel opts: #{inspect(opts)}, sentinel_opts: #{inspect(sentinel_opts)}, conn_pid: #{inspect(conn_pid)}")
     sentinels = Keyword.fetch!(sentinel_opts, :sentinels)
     transport = if sentinel_opts[:ssl], do: :ssl, else: :gen_tcp
 
@@ -133,12 +140,12 @@ defmodule Redix.Connector do
   end
 
   defp connect_through_sentinel([], _sentinel_opts, _opts, _transport, _conn_pid) do
-    Logger.error("Redix.Connector connect_through_sentinel/5 case []")
+    Logger.error("Redix.Connector connect_through_sentinel case []")
     {:error, :no_viable_sentinel_connection}
   end
 
   defp connect_through_sentinel([sentinel | rest], sentinel_opts, opts, transport, conn_pid) do
-    Logger.error("Redix.Connector connect_through_sentinel/5")
+    Logger.error("Redix.Connector connect_through_sentinel sentinel #{inspect(sentinel)}, rest: #{inspect(rest)}, sentinel_opts: #{inspect(sentinel_opts)}, opts: #{inspect(opts)}, transport: #{inspect(transport)}, conn_pid: #{inspect(conn_pid)}")
     case connect_to_sentinel(sentinel, sentinel_opts, transport) do
       {:ok, sent_socket} ->
         Logger.error("Connected to sentinel #{inspect(sentinel)}")
@@ -185,7 +192,7 @@ defmodule Redix.Connector do
   end
 
   defp string_address_to_erlang(address) when is_binary(address) do
-    Logger.error("Redix.Connector string_address_to_erlang/1 when is_binary")
+    Logger.error("Redix.Connector string_address_to_erlang/1 when is_binary address: #{inspect(address)}")
     address = String.to_charlist(address)
 
     case :inet.parse_address(address) do
@@ -195,12 +202,12 @@ defmodule Redix.Connector do
   end
 
   defp string_address_to_erlang(address) do
-    Logger.error("Redix.Connector string_address_to_erlang/1")
+    Logger.error("Redix.Connector string_address_to_erlang address: #{inspect(address)}")
     address
   end
 
   defp connect_to_sentinel(sentinel, sentinel_opts, transport) do
-    Logger.error("Redix.Connector connect_to_sentinel/3")
+    Logger.error("Redix.Connector connect_to_sentinel sentinel #{inspect(sentinel)}, sentinel_opts: #{inspect(sentinel_opts)}, transport: #{inspect(transport)}")
     host = Keyword.fetch!(sentinel, :host)
     port = Keyword.fetch!(sentinel, :port)
     socket_opts = build_socket_opts(transport, sentinel_opts[:socket_opts])
@@ -208,7 +215,7 @@ defmodule Redix.Connector do
   end
 
   defp ask_sentinel_for_server(transport, sent_socket, sentinel_opts) do
-    Logger.error("Redix.Connector ask_sentinel_for_server/3")
+    Logger.error("Redix.Connector ask_sentinel_for_server transport: #{inspect(transport)}, sent_socket: #{inspect(sent_socket)}, sentinel_opts: #{inspect(sentinel_opts)}")
     group = Keyword.fetch!(sentinel_opts, :group)
 
     case sentinel_opts[:role] do
@@ -240,7 +247,7 @@ defmodule Redix.Connector do
   end
 
   defp verify_server_role(server_socket, opts, sentinel_opts) do
-    Logger.error("Redix.Connector verify_server_role/3")
+    Logger.error("Redix.Connector verify_server_role server_socket: #{inspect(server_socket)}, opts: #{inspect(opts)}, sentinel_opts: #{inspect(sentinel_opts)}")
     transport = if opts[:ssl], do: :ssl, else: :gen_tcp
     timeout = opts[:timeout] || @default_timeout
 
@@ -258,12 +265,12 @@ defmodule Redix.Connector do
   end
 
   defp build_socket_opts(:gen_tcp, user_socket_opts) do
-    Logger.error("Redix.Connector build_socket_opts/2 gen_tcp")
+    Logger.error("Redix.Connector build_socket_opts gen_tcp, user_socket_opts: #{inspect(user_socket_opts)}")
     @socket_opts ++ user_socket_opts
   end
 
   defp build_socket_opts(:ssl, user_socket_opts) do
-    Logger.error("Redix.Connector build_socket_opts/2 ssl")
+    Logger.error("Redix.Connector build_socket_opts ssl, user_socket_opts: #{inspect(user_socket_opts)}")
     # Needs to be dynamic to avoid compile-time warnings.
     ca_store_mod = CAStore
 
@@ -280,7 +287,7 @@ defmodule Redix.Connector do
 
   # Setups the `:buffer` option of the given socket.
   defp setup_socket_buffers(transport, socket) do
-    Logger.error("Redix.Connector setup_socket_buffers/2")
+    Logger.error("Redix.Connector setup_socket_buffers, transport: #{inspect(transport)}, socket: #{inspect(socket)}")
     inet_mod = if transport == :ssl, do: :ssl, else: :inet
 
     with {:ok, opts} <- inet_mod.getopts(socket, [:sndbuf, :recbuf, :buffer]) do
@@ -302,13 +309,13 @@ defmodule Redix.Connector do
           | {:error, Redix.Error.t()}
           | {:error, :inet.posix()}
   def sync_command(transport, socket, command, timeout) do
-    Logger.error("Redix.Connector sync_command/4, command: #{inspect(command)}")
+    Logger.error("Redix.Connector sync_command transport: #{inspect(transport)}, socket: #{inspect(socket)}, command: #{inspect(command)}, timeout: #{inspect(timeout)}")
     with :ok <- transport.send(socket, Redix.Protocol.pack(command)),
          do: recv_response(transport, socket, &Redix.Protocol.parse/1, timeout)
   end
 
   defp recv_response(transport, socket, continuation, timeout) do
-    Logger.error("Redix.Connector recv_response/4")
+    Logger.error("Redix.Connector recv_response transport: #{inspect(transport)}, socket: #{inspect(socket)}, continuation: #{inspect(continuation)}, timeout: #{inspect(timeout)}")
     with {:ok, data} <- transport.recv(socket, 0, timeout) do
       case continuation.(data) do
         {:ok, %Redix.Error{} = error, ""} -> {:error, error}
