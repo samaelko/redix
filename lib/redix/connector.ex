@@ -256,11 +256,18 @@ defmodule Redix.Connector do
         :primary -> "master"
         :replica -> "slave"
       end
+    Logger.error("Redix.Connector verify_server_role expected_role: #{inspect(expected_role)}")
 
     case sync_command(transport, server_socket, ["ROLE"], timeout) do
-      {:ok, [^expected_role | _]} -> :ok
-      {:ok, [role | _]} -> {:error, {:wrong_role, role}}
-      {:error, _reason_or_redis_error} = error -> error
+      {:ok, [^expected_role | _]} ->
+        Logger.error("Redix.Connector verify_server_role OK")
+        :ok
+      {:ok, [role | _]} ->
+        Logger.error("Redix.Connector verify_server_role WRONG ROLE: #{inspect(role)}")
+        {:error, {:wrong_role, role}}
+      {:error, _reason_or_redis_error} = error ->
+        Logger.error("Redix.Connector verify_server_role ERROR: #{inspect(error)}")
+        error
     end
   end
 
